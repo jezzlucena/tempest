@@ -1,0 +1,48 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/levels/level_3.gd" id="1_level"]
+[ext_resource type="PackedScene" path="res://scenes/player/player.tscn" id="2_player"]
+[ext_resource type="Script" path="res://scripts/camera/player_camera.gd" id="3_camera"]
+[ext_resource type="Shader" path="res://shaders/tessellation.gdshader" id="4_tess"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_tess"]
+shader = ExtResource("4_tess")
+shader_parameter/morph = 0.5
+shader_parameter/scale = 12.0
+shader_parameter/time_offset = 42.0
+shader_parameter/scroll_speed = 0.2
+
+[node name="Level3" type="Node2D"]
+script = ExtResource("1_level")
+
+[node name="TileMapPast" type="TileMapLayer" parent="."]
+
+[node name="TileMapPresent" type="TileMapLayer" parent="."]
+
+[node name="TileMapFuture" type="TileMapLayer" parent="."]
+
+[node name="Player" parent="." instance=ExtResource("2_player")]
+position = Vector2(80, 620)
+
+[node name="Camera2D" type="Camera2D" parent="Player"]
+position = Vector2(0, -100)
+position_smoothing_enabled = true
+position_smoothing_speed = 8.0
+script = ExtResource("3_camera")
+
+[node name="Background" type="ColorRect" parent="."]
+z_index = -10
+offset_left = -500.0
+offset_top = -1000.0
+offset_right = 5000.0
+offset_bottom = 2000.0
+color = Color(0.1, 0.09, 0.13, 1)
+
+[node name="TessellationBG" type="ColorRect" parent="."]
+z_index = -9
+material = SubResource("ShaderMaterial_tess")
+offset_left = -500.0
+offset_top = -1000.0
+offset_right = 5000.0
+offset_bottom = 2000.0
+color = Color(1, 1, 1, 1)
