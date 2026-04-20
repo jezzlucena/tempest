@@ -8,7 +8,9 @@ extends Node2D
 ##   Section 1C (x: 80-100): The Vertical Labyrinth — gravity shaft + Penrose stairs
 ##   Section 1D (x: 105-135): The Gatehouse — rapid gravity corridor
 
-@onready var tilemap: TileMapLayer = $TileMapLayer
+@onready var tilemap_past: TileMapLayer = $TileMapPast
+@onready var tilemap: TileMapLayer = $TileMapPresent  # build target — Present is authoritative
+@onready var tilemap_future: TileMapLayer = $TileMapFuture
 @onready var player: CharacterBody2D = $Player
 
 const CHECKPOINT_SCENE := preload("res://scenes/objects/checkpoint.tscn")
@@ -19,24 +21,55 @@ const SEAM_SCENE := preload("res://scenes/objects/teleport_seam.tscn")
 const COLLAPSING_SCENE := preload("res://scenes/objects/collapsing_platform.tscn")
 const HEALTH_SCENE := preload("res://scenes/objects/health_collectible.tscn")
 const EXIT_SCENE := preload("res://scenes/objects/level_exit.tscn")
+const SHARD_SCENE := preload("res://scenes/objects/infinity_shard.tscn")
+
+## Palette — matches W0-L2/W0-L3 era colours.
+const ERA_COLOR_PAST := Color(0.45, 0.38, 0.25)
+const ERA_COLOR_PRESENT := Color(0.28, 0.28, 0.33)
+const ERA_COLOR_FUTURE := Color(0.2, 0.25, 0.42)
 
 var _built: bool = false
 
 
 func _ready() -> void:
-	tilemap.tile_set = LevelBuilder.create_tileset()
+	# Build all geometry into Present first, then mirror cells to Past and
+	# Future so all three era tilemaps have identical collision — a clean
+	# era shift, plus a hidden Past-shard pocket the player can only reach
+	# after earning era-shift on a later run.
+	tilemap.tile_set = LevelBuilder.create_tileset(ERA_COLOR_PRESENT)
+	tilemap_past.tile_set = LevelBuilder.create_tileset(ERA_COLOR_PAST)
+	tilemap_future.tile_set = LevelBuilder.create_tileset(ERA_COLOR_FUTURE)
+
 	_build_section_1a()
 	_build_section_1b()
 	_build_section_1c()
 	_build_section_1d()
+	_mirror_tiles_to_other_eras()
+
+	LevelStateManager.clear_layers()
+	LevelStateManager.register_era_layer(TimeManager.Era.PAST, tilemap_past)
+	LevelStateManager.register_era_layer(TimeManager.Era.PRESENT, tilemap)
+	LevelStateManager.register_era_layer(TimeManager.Era.FUTURE, tilemap_future)
+	TimeManager.current_era = TimeManager.Era.PRESENT
+	LevelStateManager.swap_era(TimeManager.Era.PRESENT)
+
 	_place_checkpoints()
 	_place_hazards()
 	_place_moving_platforms()
 	_place_collectibles()
+	_place_past_shard()
 	_add_tutorial_hints()
 	_add_kill_zone()
 	add_child(HUD_SCENE.instantiate())
 	_built = true
+
+
+func _mirror_tiles_to_other_eras() -> void:
+	# Copy every used cell from Present into Past and Future. LevelBuilder
+	# always uses source 0, atlas (0,0) so the fill is trivial.
+	for cell in tilemap.get_used_cells():
+		tilemap_past.set_cell(cell, LevelBuilder.TILE_SOURCE_ID, Vector2i(0, 0))
+		tilemap_future.set_cell(cell, LevelBuilder.TILE_SOURCE_ID, Vector2i(0, 0))
 
 
 # ── Section 1A — The Courtyard ──────────────────────────────────────────────
@@ -306,6 +339,18 @@ func _place_collectibles() -> void:
 
 	# 1C — center of the shaft on the floating platform (reachable from multiple orientations)
 	_add_collectible(Vector2(89 * 32, 3 * 32))
+
+
+## Past-era shard — the first of three fragments of the Infinity Visor.
+## Visible and collectable only while gravity-rotated travelers have also
+## shifted to Past, deep in the Vertical Labyrinth shaft.
+func _place_past_shard() -> void:
+	var shard := SHARD_SCENE.instantiate()
+	shard.position = LevelBuilder.tile_to_world(Vector2i(98, 5))
+	shard.shard_id = GameManager.ITEM_SHARD_PAST
+	shard.required_era = int(TimeManager.Era.PAST)
+	shard.era_tint = Color(1.0, 0.72, 0.35, 1.0)
+	add_child(shard)
 
 
 func _add_collectible(pos: Vector2) -> void:

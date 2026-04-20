@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/objects/infinity_shard.gd" id="1_shard"]
+
+[node name="InfinityShard" type="Area2D"]
+script = ExtResource("1_shard")

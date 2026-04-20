@@ -10,6 +10,10 @@ const BASE_COLOR := Color(0.4, 0.15, 0.15, 0.9)
 @export var spike_count: int = 1
 @export var spike_width: float = 32.0
 @export var spike_height: float = 20.0
+## When ≥0, the spike is active (visible + damaging) only while the given
+## era is current. Default -1 keeps the original always-on behavior for
+## existing levels.
+@export var active_era: int = -1
 
 var _collision_built: bool = false
 
@@ -18,6 +22,19 @@ func _ready() -> void:
 	body_entered.connect(_on_body_entered)
 	if not _collision_built:
 		_build_collision()
+	if active_era >= 0:
+		TimeManager.era_changed.connect(_on_era_changed)
+		_refresh_era_state()
+
+
+func _on_era_changed(_era: int) -> void:
+	_refresh_era_state()
+
+
+func _refresh_era_state() -> void:
+	var matches: bool = int(TimeManager.current_era) == active_era
+	visible = matches
+	set_deferred("monitoring", matches)
 
 
 func _build_collision() -> void:

@@ -9,6 +9,10 @@ const BUBBLE_COLOR := Color(0.3, 0.5, 0.9, 0.15)
 const BUBBLE_EDGE_COLOR := Color(0.4, 0.6, 1.0, 0.4)
 const BUBBLE_PULSE_SPEED: float = 3.0
 
+## When true, the field never expires — used by levels that pre-place
+## fields (e.g. W4-3's corner pockets) instead of the player casting them.
+@export var permanent: bool = false
+
 var time_alive: float = 0.0
 var _area: Area2D
 
@@ -31,7 +35,7 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	time_alive += delta
-	if time_alive >= DURATION:
+	if not permanent and time_alive >= DURATION:
 		_expire()
 		return
 	queue_redraw()
@@ -56,8 +60,9 @@ func is_position_inside(pos: Vector2) -> bool:
 
 
 func _draw() -> void:
-	var life_ratio := time_alive / DURATION
-	var fade := 1.0 - life_ratio  # Fades as it expires
+	# Permanent fields stay fully opaque; cast fields fade as they expire.
+	var life_ratio: float = 0.0 if permanent else time_alive / DURATION
+	var fade: float = 1.0 if permanent else 1.0 - life_ratio
 	var pulse := sin(time_alive * BUBBLE_PULSE_SPEED) * 0.3 + 0.7
 
 	# Filled bubble
@@ -76,7 +81,8 @@ func _draw() -> void:
 	ripple_color.a *= fade * 0.3
 	draw_arc(Vector2.ZERO, ripple_r, 0, TAU, 32, ripple_color, 1.0)
 
-	# Time remaining indicator — shrinking inner circle
-	var remaining_radius := RADIUS * (1.0 - life_ratio) * 0.3
-	var indicator_color := Color(0.6, 0.8, 1.0, 0.3 * fade)
-	draw_circle(Vector2.ZERO, remaining_radius, indicator_color)
+	# Time remaining indicator — only meaningful for non-permanent fields.
+	if not permanent:
+		var remaining_radius := RADIUS * (1.0 - life_ratio) * 0.3
+		var indicator_color := Color(0.6, 0.8, 1.0, 0.3 * fade)
+		draw_circle(Vector2.ZERO, remaining_radius, indicator_color)

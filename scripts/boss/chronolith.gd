@@ -12,6 +12,10 @@ const BODY_COLOR := Color(0.4, 0.35, 0.55, 0.9)
 const DAMAGED_COLOR := Color(0.7, 0.3, 0.3, 0.9)
 const BODY_SIZE := 80.0
 
+## Interval at which the visor's true-core weak point shifts era while
+## the boss fight is active.
+const TRUE_CORE_SHIFT_INTERVAL: float = 3.5
+
 var hp: float = MAX_HP
 var current_phase: int = 1
 var _phase_timer: float = 0.0
@@ -19,9 +23,17 @@ var _attack_timer: float = 0.0
 var _rotation_angle: float = 0.0
 var _active: bool = false
 var _defeated: bool = false
+## True when the killing blow came from the visor-only true core. Read
+## by the level script to pick the true-ending branch.
+var defeated_via_true_core: bool = false
 
 var _weak_points: Array[Node2D] = []
 var _current_phase_script: Node = null
+## Always-present weak-point shown only while the Infinity Visor is worn.
+## It never expires, just rotates required_era periodically.
+var _true_core: Node2D = null
+var _true_core_timer: float = 0.0
+var _true_core_era_index: int = 0
 
 const PROJECTILE_SCENE := preload("res://scenes/objects/projectile.tscn")
 const WEAK_POINT_SCENE := preload("res://scenes/boss/weak_point.tscn")
@@ -36,9 +48,15 @@ func _ready() -> void:
 func activate() -> void:
 	_active = true
 	_defeated = false
+	defeated_via_true_core = false
 	set_process(true)
 	set_physics_process(true)
 	_enter_phase(1)
+	# Listen for visor toggles mid-fight so we can spawn / despawn the
+	# true core in response.
+	if not GameManager.visor_toggled.is_connected(_on_visor_toggled):
+		GameManager.visor_toggled.connect(_on_visor_toggled)
+	_refresh_true_core_presence()
 
 
 func deactivate() -> void:
@@ -46,6 +64,7 @@ func deactivate() -> void:
 	set_process(false)
 	set_physics_process(false)
 	_clear_weak_points()
+	_clear_true_core()
 	_clear_all_projectiles()
 	# Reset state
 	hp = MAX_HP
@@ -59,6 +78,9 @@ func deactivate() -> void:
 	_p2_burst_count = 0
 	_p3_weak_timer = 0.0
 	_p3_era_cycle = 0
+	_true_core_timer = 0.0
+	_true_core_era_index = 0
+	defeated_via_true_core = false
 
 
 func _clear_all_projectiles() -> void:
@@ -76,7 +98,103 @@ func _process(delta: float) -> void:
 		return
 	_phase_timer += delta
 	_rotation_angle += delta * 0.5
+	_tick_true_core(delta)
 	queue_redraw()
+
+
+## ── Infinity Visor: true-core weak point ────────────────────────────────
+
+func _on_visor_toggled(_active_state: bool) -> void:
+	if _defeated or not _active:
+		return
+	_refresh_true_core_presence()
+
+
+## Ensure the true-core is alive iff the visor is currently active. Also
+## clears any normal weak points when the visor switches on, since those
+## are unreachable while worn.
+func _refresh_true_core_presence() -> void:
+	var visor_on: bool = GameManager.visor_active
+	if visor_on:
+		_clear_weak_points()
+		if _true_core == null or not is_instance_valid(_true_core):
+			_spawn_true_core()
+	else:
+		_clear_true_core()
+
+
+func _spawn_true_core() -> void:
+	var wp := WEAK_POINT_SCENE.instantiate()
+	# Place on the ceiling relative to current gravity, like normal weak
+	# points. It will not expire on its own.
+	var up := GravityManager.get_up_direction()
+	wp.global_position = global_position + up * 180.0
+	wp.hit.connect(_on_true_core_hit)
+	get_tree().current_scene.add_child(wp)
+	# Huge lifetime so _process-driven era shifts, not the timer, retire it.
+	wp.activate(9999.0, _true_core_era_index)
+	_true_core = wp
+	_true_core_timer = 0.0
+
+
+func _clear_true_core() -> void:
+	if _true_core != null and is_instance_valid(_true_core):
+		_true_core.deactivate()
+		_true_core.queue_free()
+	_true_core = null
+
+
+func _tick_true_core(delta: float) -> void:
+	if _true_core == null or not is_instance_valid(_true_core):
+		return
+	_true_core_timer += delta
+	# Follow the boss in case of gravity rotations, staying "above" it.
+	var up := GravityManager.get_up_direction()
+	_true_core.global_position = global_position + up * 180.0
+
+	if _true_core_timer >= TRUE_CORE_SHIFT_INTERVAL:
+		_true_core_timer = 0.0
+		_true_core_era_index = (_true_core_era_index + 1) % 3
+		# Update lock in-place — restart activate() with new era.
+		_true_core.required_era = _true_core_era_index
+
+
+func _on_true_core_hit() -> void:
+	if _defeated:
+		return
+	# Each hit does proportional damage so three hits ends the fight,
+	# similar pacing to normal weak points. Mark as true-core damage so
+	# the level picks the true-ending branch when HP reaches zero.
+	take_damage_from_true_core(10.0)
+	# Refresh — the hit deactivates the weak point; we want it to persist.
+	if _defeated:
+		return
+	if GameManager.visor_active:
+		_clear_true_core()
+		_spawn_true_core()
+
+
+func take_damage(amount: float = 1.0) -> void:
+	_receive_damage(amount, false)
+
+
+func take_damage_from_true_core(amount: float = 1.0) -> void:
+	_receive_damage(amount, true)
+
+
+func _receive_damage(amount: float, via_true_core: bool) -> void:
+	hp -= amount
+	hp = max(hp, 0)
+	if via_true_core and hp <= 0:
+		defeated_via_true_core = true
+	# Phase transitions by HP threshold, same pacing as before.
+	var hp_ratio := hp / MAX_HP
+	if hp_ratio <= 0:
+		_defeat()
+	elif hp_ratio <= 0.33 and current_phase < 3:
+		_enter_phase(3)
+	elif hp_ratio <= 0.66 and current_phase < 2:
+		_enter_phase(2)
 
 
 func _physics_process(delta: float) -> void:
@@ -88,20 +206,6 @@ func _physics_process(delta: float) -> void:
 		1: _phase_1_logic(delta)
 		2: _phase_2_logic(delta)
 		3: _phase_3_logic(delta)
-
-
-func take_damage(amount: float = 1.0) -> void:
-	hp -= amount
-	hp = max(hp, 0)
-
-	# Phase transitions
-	var hp_ratio := hp / MAX_HP
-	if hp_ratio <= 0:
-		_defeat()
-	elif hp_ratio <= 0.33 and current_phase < 3:
-		_enter_phase(3)
-	elif hp_ratio <= 0.66 and current_phase < 2:
-		_enter_phase(2)
 
 
 func _enter_phase(phase: int) -> void:
@@ -237,6 +341,10 @@ func _force_gravity_shift() -> void:
 
 
 func _spawn_weak_point_on_ceiling(duration: float, era: int = -1) -> void:
+	# Normal weak points are suppressed while the Infinity Visor is worn —
+	# the true core is the only legal target during a visor run.
+	if GameManager.visor_active:
+		return
 	var wp := WEAK_POINT_SCENE.instantiate()
 	# Place away from boss center, biased toward current "up" direction
 	# but within the arena bounds (arena is ~30 tiles = 960px across)
@@ -263,6 +371,7 @@ func _clear_weak_points() -> void:
 func _defeat() -> void:
 	_defeated = true
 	_clear_weak_points()
+	_clear_true_core()
 	# Kill all projectiles
 	for node in get_tree().get_nodes_in_group("projectiles"):
 		node.queue_free()

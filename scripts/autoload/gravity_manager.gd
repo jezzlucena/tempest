@@ -35,6 +35,10 @@ func _process(delta: float) -> void:
 		_player = GameManager.player
 		return
 
+	# Player-driven gravity rotation is gated on the gravity ability.
+	# Boss-forced rotations call rotate_gravity(dir, true) and bypass this.
+	if not GameManager.has_ability(GameManager.ABILITY_GRAVITY):
+		return
 	if Input.is_action_just_pressed("gravity_left"):
 		rotate_gravity(-1)
 	elif Input.is_action_just_pressed("gravity_right"):

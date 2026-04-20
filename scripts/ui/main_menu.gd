@@ -13,10 +13,26 @@ const TITLE_COLOR := Color(0.7, 0.85, 1.0, 1.0)
 const HIGHLIGHT_COLOR := Color(0.4, 0.9, 0.6, 1.0)
 const DIM_COLOR := Color(0.4, 0.45, 0.55, 0.6)
 
-const LEVEL_NAMES := [
-	"Level 1 — The Ascending Ruin",
-	"Level 2 — The Fractured Gallery",
-	"Level 3 — The Chronolith",
+## Flat list of (world, level, label) tuples for the level-select screen.
+const LEVEL_ENTRIES := [
+	[0, 0, "W0-1 — The Ascending Ruin"],
+	[0, 1, "W0-2 — The Fractured Gallery"],
+	[0, 2, "W0-3 — The Chronolith"],
+	[1, 0, "W1-1 — The Still Plaza"],
+	[1, 1, "W1-2 — Three Tier Tempo"],
+	[1, 2, "W1-3 — Sentry Gate"],
+	[2, 0, "W2-1 — The Rising Stair"],
+	[2, 1, "W2-2 — The Narrow Shaft"],
+	[2, 2, "W2-3 — The Wall Crawler"],
+	[3, 0, "W3-1 — The Ceiling Loop"],
+	[3, 1, "W3-2 — The Inverted Corridor"],
+	[3, 2, "W3-3 — The Tumbler"],
+	[4, 0, "W4-1 — Bullet Storm Gallery"],
+	[4, 1, "W4-2 — Racing Platforms"],
+	[4, 2, "W4-3 — The Phantom"],
+	[5, 0, "W5-1 — The Stacked Archive"],
+	[5, 1, "W5-2 — The Shifting Halls"],
+	[5, 2, "W5-3 — The Archivist"],
 ]
 
 var title_menu: Array = []
@@ -33,6 +49,15 @@ const CONTROLS := [
 ]
 
 var _time: float = 0.0
+
+## Level-select scrolling — the list is always anchored so the selected
+## row sits at the centre of the screen. _levels_scroll is the animated
+## current scroll position (px). Snaps on screen entry, lerps on navigation.
+const LEVEL_ROW_HEIGHT: float = 45.0
+const LEVEL_FADE_RANGE: float = 260.0   # px either side of centre where rows fully visible
+const LEVEL_FADE_FLOOR: float = 0.18    # minimum alpha for far rows
+const LEVEL_SCROLL_SMOOTHING: float = 14.0
+var _levels_scroll: float = 0.0
 
 
 func _ready() -> void:
@@ -52,6 +77,13 @@ func _rebuild_menu() -> void:
 func _process(delta: float) -> void:
 	_time += delta
 	queue_redraw()
+
+	if current_screen == Screen.LEVELS:
+		# Smoothly lerp the visible scroll toward the row for the current
+		# selection. Frame-rate-independent blend via exp smoothing.
+		var target: float = float(selected_index) * LEVEL_ROW_HEIGHT
+		var t: float = 1.0 - exp(-delta * LEVEL_SCROLL_SMOOTHING)
+		_levels_scroll = lerp(_levels_scroll, target, t)
 
 	if Input.is_action_just_pressed("ui_menu"):
 		if current_screen != Screen.TITLE:
@@ -84,10 +116,11 @@ func _handle_title_input(event: InputEventKey) -> void:
 			"Continue":
 				GameManager.continue_game()
 			"New Game":
-				GameManager.go_to_level(0)
+				GameManager.go_to_level(0, 0)
 			"Level Select":
 				current_screen = Screen.LEVELS
 				selected_index = 0
+				_levels_scroll = float(selected_index) * LEVEL_ROW_HEIGHT
 			"Controls":
 				current_screen = Screen.CONTROLS
 				selected_index = 0
@@ -95,11 +128,12 @@ func _handle_title_input(event: InputEventKey) -> void:
 
 func _handle_levels_input(event: InputEventKey) -> void:
 	if event.keycode == KEY_W or event.keycode == KEY_UP:
-		selected_index = (selected_index - 1 + LEVEL_NAMES.size()) % LEVEL_NAMES.size()
+		selected_index = (selected_index - 1 + LEVEL_ENTRIES.size()) % LEVEL_ENTRIES.size()
 	elif event.keycode == KEY_S or event.keycode == KEY_DOWN:
-		selected_index = (selected_index + 1) % LEVEL_NAMES.size()
+		selected_index = (selected_index + 1) % LEVEL_ENTRIES.size()
 	elif event.keycode == KEY_SPACE or event.keycode == KEY_ENTER:
-		GameManager.go_to_level(selected_index)
+		var entry: Array = LEVEL_ENTRIES[selected_index]
+		GameManager.go_to_level(int(entry[0]), int(entry[1]))
 	elif event.keycode == KEY_ESCAPE:
 		current_screen = Screen.TITLE
 		selected_index = 0
@@ -147,15 +181,45 @@ func _draw_levels() -> void:
 	var cx: float = size.x / 2.0
 	var cy: float = size.y / 2.0
 
-	_draw_centered_text("LEVEL SELECT", Vector2(cx, cy - 120), 32, TITLE_COLOR)
+	# Title and footer are fixed to the viewport; the list scrolls between them.
+	var title_y: float = 80.0
+	var footer_y: float = size.y - 40.0
+	_draw_centered_text("LEVEL SELECT", Vector2(cx, title_y), 32, TITLE_COLOR)
 
-	for i in range(LEVEL_NAMES.size()):
-		var y_pos: float = cy - 20 + i * 45
-		var color: Color = HIGHLIGHT_COLOR if i == selected_index else TEXT_COLOR
+	# Define a vertical band the list renders into. Rows outside are clipped
+	# by fade-to-zero so the list feels like a focused slot-reel.
+	var band_top: float = title_y + 40.0
+	var band_bottom: float = footer_y - 30.0
+
+	var total: int = LEVEL_ENTRIES.size()
+	for i in range(total):
+		var base_y: float = float(i) * LEVEL_ROW_HEIGHT
+		var y_pos: float = cy + (base_y - _levels_scroll)
+		if y_pos < band_top - LEVEL_ROW_HEIGHT or y_pos > band_bottom + LEVEL_ROW_HEIGHT:
+			continue
+
+		# Fade based on distance from centre; the selected row (at cy) is
+		# fully opaque, and rows toward the band edges dim to LEVEL_FADE_FLOOR.
+		var dist: float = abs(y_pos - cy)
+		var fade: float = clampf(1.0 - dist / LEVEL_FADE_RANGE, LEVEL_FADE_FLOOR, 1.0)
+		var base_color: Color = HIGHLIGHT_COLOR if i == selected_index else TEXT_COLOR
+		var color: Color = Color(base_color.r, base_color.g, base_color.b, base_color.a * fade)
 		var prefix: String = "> " if i == selected_index else "  "
-		_draw_centered_text(prefix + LEVEL_NAMES[i], Vector2(cx, y_pos), 20, color)
+		var label: String = LEVEL_ENTRIES[i][2]
+		_draw_centered_text(prefix + label, Vector2(cx, y_pos), 20, color)
 
-	_draw_centered_text("W/S to navigate, Space to select, Esc to go back", Vector2(cx, size.y - 40), 12, DIM_COLOR)
+	# Up/down hints if there are entries off the visible band.
+	var pulse: float = sin(_time * 3.0) * 0.25 + 0.75
+	if selected_index > 0:
+		var hint_col := DIM_COLOR
+		hint_col.a *= pulse
+		_draw_centered_text("▲", Vector2(cx, band_top + 10.0), 18, hint_col)
+	if selected_index < total - 1:
+		var hint_col := DIM_COLOR
+		hint_col.a *= pulse
+		_draw_centered_text("▼", Vector2(cx, band_bottom - 10.0), 18, hint_col)
+
+	_draw_centered_text("W/S to navigate, Space to select, Esc to go back", Vector2(cx, footer_y), 12, DIM_COLOR)
 
 
 func _draw_controls() -> void:

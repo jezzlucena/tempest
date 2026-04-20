@@ -44,7 +44,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.keycode == KEY_SPACE or event.keycode == KEY_ENTER:
 		match selected_index:
 			0:  # Play Again
-				GameManager.go_to_level(0)
+				GameManager.go_to_level(0, 0)
 			1:  # Level Select
 				GameManager.go_to_menu()
 			2:  # Main Menu

@@ -18,6 +18,6 @@ func physics_process(delta: float) -> void:
 		state_machine.transition_to("fall")
 		return
 
-	# Check for wall slide opportunity
-	if player.is_on_wall() and not player.is_on_floor():
+	# Check for wall slide opportunity (requires wall-jump ability)
+	if player.is_on_wall() and not player.is_on_floor() and GameManager.has_ability(GameManager.ABILITY_WALL_JUMP):
 		state_machine.transition_to("wall_slide")

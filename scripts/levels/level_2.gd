@@ -343,6 +343,9 @@ func _add_collapsing_row(start_pos: Vector2, count: int) -> void:
 		add_child(cp)
 
 
+const SHARD_SCENE := preload("res://scenes/objects/infinity_shard.tscn")
+
+
 func _place_collectibles() -> void:
 	# 2A — between the 2nd and 3rd pendulums, on the high platform
 	_add_collectible(Vector2(20 * 32, 13 * 32))
@@ -352,6 +355,15 @@ func _place_collectibles() -> void:
 
 	# 2C — on the Past upper gallery (requires era shift + platforming)
 	_add_collectible(Vector2(96 * 32, 7 * 32))
+
+	# Present-only: second fragment of the Infinity Visor, hidden deep in
+	# 2D's Impossible Corridor in a spot the other eras occlude.
+	var shard := SHARD_SCENE.instantiate()
+	shard.position = LevelBuilder.tile_to_world(Vector2i(130, 10))
+	shard.shard_id = GameManager.ITEM_SHARD_PRESENT
+	shard.required_era = int(TimeManager.Era.PRESENT)
+	shard.era_tint = Color(0.85, 0.9, 1.0, 1.0)
+	add_child(shard)
 
 
 func _add_collectible(pos: Vector2) -> void:

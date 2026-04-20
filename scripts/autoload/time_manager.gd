@@ -36,7 +36,9 @@ func _process(delta: float) -> void:
 	if _era_cooldown > 0:
 		_era_cooldown -= delta
 
-	# Era shift input
+	# Era shift input (gated on ability)
+	if not GameManager.has_ability(GameManager.ABILITY_ERA_SHIFT):
+		return
 	if Input.is_action_just_pressed("era_shift_earlier"):
 		era_shift(-1)
 	elif Input.is_action_just_pressed("era_shift_later"):

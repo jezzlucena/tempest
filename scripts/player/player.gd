@@ -72,14 +72,17 @@ func _process(delta: float) -> void:
 	if _dilation_cooldown > 0:
 		_dilation_cooldown -= delta
 
-	# Dilation aiming
-	if Input.is_action_pressed("dilation_cast"):
-		is_aiming_dilation = true
-		dilation_aim_pos = get_global_mouse_position()
+	# Dilation aiming (gated on ability)
+	if GameManager.has_ability(GameManager.ABILITY_DILATION):
+		if Input.is_action_pressed("dilation_cast"):
+			is_aiming_dilation = true
+			dilation_aim_pos = get_global_mouse_position()
+		elif is_aiming_dilation:
+			# Released — place the field
+			is_aiming_dilation = false
+			_try_cast_dilation()
 	elif is_aiming_dilation:
-		# Released — place the field
 		is_aiming_dilation = false
-		_try_cast_dilation()
 
 	queue_redraw()
 

@@ -17,6 +17,7 @@ func _ready() -> void:
 	_register_action("era_shift_later", KEY_RIGHT, KEY_MASK_SHIFT)
 	_register_mouse_action("dilation_cast", MOUSE_BUTTON_RIGHT)
 	_register_action("ui_menu", KEY_ESCAPE)
+	_register_action("visor_toggle", KEY_V)
 
 
 func _register_action(action_name: String, key: Key, modifiers: int = 0) -> void:

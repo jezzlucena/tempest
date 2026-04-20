@@ -8,6 +8,11 @@ const SEAM_COLOR := Color(0.4, 0.5, 0.7, 0.15)
 @export var partner_path: NodePath
 @export var seam_height: float = 96.0
 @export var seam_width: float = 32.0
+## When true (default), the teleport preserves the player's position
+## offset from the seam's center — used by Penrose loops where the seams
+## are visually identical. When false, the player is warped to the
+## partner's exact position, which is what W3-1's cross-shaft jumps want.
+@export var preserve_offset: bool = true
 
 var partner: Area2D = null
 var _cooldown: float = 0.0
@@ -45,8 +50,11 @@ func _on_body_entered(body: Node2D) -> void:
 		return
 
 	# Teleport player to partner position, preserving velocity
-	var offset := body.global_position - global_position
-	body.global_position = partner.global_position + offset
+	if preserve_offset:
+		var offset := body.global_position - global_position
+		body.global_position = partner.global_position + offset
+	else:
+		body.global_position = partner.global_position
 	# Set cooldown on partner to prevent instant back-teleport
 	partner._cooldown = TELEPORT_COOLDOWN
 	_cooldown = TELEPORT_COOLDOWN

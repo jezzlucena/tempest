@@ -254,6 +254,9 @@ func _add_spike(pos: Vector2, count: int = 1) -> void:
 	add_child(spike)
 
 
+const SHARD_SCENE := preload("res://scenes/objects/infinity_shard.tscn")
+
+
 func _place_collectibles() -> void:
 	# 3A Room 1 — above the moving platforms (requires dilation + precise jump)
 	_add_collectible(Vector2(10 * 32, 8 * 32))
@@ -263,6 +266,15 @@ func _place_collectibles() -> void:
 
 	# 3A Room 3 — above the ceiling platform (requires gravity rotation to 180)
 	_add_collectible(Vector2(49 * 32, 3 * 32))
+
+	# Future-only: third fragment of the Infinity Visor, at the far edge
+	# of 3A Room 2 where only Future's extra stepping-stone reaches.
+	var shard := SHARD_SCENE.instantiate()
+	shard.position = LevelBuilder.tile_to_world(Vector2i(32, 14))
+	shard.shard_id = GameManager.ITEM_SHARD_FUTURE
+	shard.required_era = int(TimeManager.Era.FUTURE)
+	shard.era_tint = Color(0.55, 0.75, 1.0, 1.0)
+	add_child(shard)
 
 
 func _add_collectible(pos: Vector2) -> void:
@@ -368,24 +380,34 @@ func _reset_boss() -> void:
 
 
 func _on_boss_defeated() -> void:
-	# Victory sequence
+	# Victory sequence — branch on whether the killing blow came from the
+	# Infinity Visor's true core. Only boss can answer that.
+	var true_ending: bool = boss != null and boss.defeated_via_true_core
+
 	# Unseal arena
 	for tm in _all_tilemaps():
 		LevelBuilder.clear_rect(tm, Vector2i(65, 12), Vector2i(65, 18))
 
-	# White out effect
+	# White out effect — tinted cooler for the true ending.
 	var canvas := CanvasLayer.new()
 	canvas.layer = 100
-	var white := ColorRect.new()
-	white.color = Color(1, 1, 1, 0)
-	white.set_anchors_preset(Control.PRESET_FULL_RECT)
-	canvas.add_child(white)
+	var flash := ColorRect.new()
+	flash.color = Color(0.9, 0.95, 1.0, 0.0) if true_ending else Color(1, 1, 1, 0)
+	flash.set_anchors_preset(Control.PRESET_FULL_RECT)
+	canvas.add_child(flash)
 	add_child(canvas)
 
 	var tween := create_tween()
 	tween.tween_interval(1.0)
-	tween.tween_property(white, "color:a", 1.0, 2.0)
+	tween.tween_property(flash, "color:a", 1.0, 2.0)
 	tween.tween_interval(1.0)
 	tween.tween_callback(func() -> void:
-		GameManager._show_victory()
+		if true_ending:
+			# Boss fell to the visor's true core — the shockwave is
+			# contained, the player keeps the kit, and the story ends.
+			GameManager.advance_to_true_ending()
+		else:
+			# Standard shockwave — strips every ability and sends the
+			# player to W1-L1 to rebuild the arsenal.
+			GameManager.advance_past_chronolith()
 	)

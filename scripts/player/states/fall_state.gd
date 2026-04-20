@@ -29,6 +29,6 @@ func physics_process(delta: float) -> void:
 		state_machine.transition_to("jump")
 		return
 
-	# Wall slide
-	if player.is_on_wall():
+	# Wall slide (requires wall-jump ability)
+	if player.is_on_wall() and GameManager.has_ability(GameManager.ABILITY_WALL_JUMP):
 		state_machine.transition_to("wall_slide")

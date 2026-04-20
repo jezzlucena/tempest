@@ -30,7 +30,10 @@ func apply_gravity(delta: float) -> void:
 
 ## Helper: get screen-relative horizontal input converted to world space.
 ## Screen→World requires rotating by -gravity_angle (inverse of camera view rotation).
+## Returns zero if the player lacks the sideways-movement ability.
 func get_movement_input() -> Vector2:
+	if not GameManager.has_ability(GameManager.ABILITY_SIDEWAYS):
+		return Vector2.ZERO
 	var input_dir := Input.get_axis("move_left", "move_right")
 	return Vector2(input_dir, 0).rotated(-GravityManager.gravity_angle_radians)
 
